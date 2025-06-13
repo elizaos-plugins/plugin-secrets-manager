@@ -1,230 +1,180 @@
-# ElizaOS Plugin
+# Environment Variable Management Plugin
 
-This is an ElizaOS plugin built with the official plugin starter template.
+A comprehensive environment variable management system for autonomous agents that provides automatic detection, generation, validation, and user interaction for environment variables.
 
-## Getting Started
+## Features
 
-```bash
-# Create a new plugin (automatically adds "plugin-" prefix)
-elizaos create -t plugin solana
-# This creates: plugin-solana
-# Dependencies are automatically installed and built
+- 🔍 **Automatic Detection**: Scans plugins and character settings for required environment variables
+- 🤖 **Auto-Generation**: Automatically generates variables that can be created programmatically (keys, secrets, UUIDs, etc.)
+- ✅ **Validation**: Tests environment variables to ensure they work correctly with their intended services
+- 👤 **User Interaction**: Requests user input for variables that cannot be auto-generated (API keys, etc.)
+- 💾 **Persistent Storage**: Stores configuration in world metadata following the same pattern as settings
+- 🔄 **Runtime Updates**: Updates environment variables without requiring agent restart
 
-# Navigate to the plugin directory
-cd plugin-solana
+## Architecture
 
-# Start development immediately
-elizaos dev
+The plugin follows the established patterns in the codebase:
+
+- **Service**: `EnvManagerService` - Manages environment variable lifecycle
+- **Provider**: `envStatusProvider` - Shows current status of all environment variables
+- **Actions**: `setEnvVarAction`, `generateEnvVarAction` - Handle user input and auto-generation
+- **Storage**: Uses `world.metadata.envVars` following the same pattern as settings and roles
+
+## Components
+
+### EnvManagerService
+
+The core service that:
+
+- Scans character settings and plugins for required environment variables
+- Maintains metadata about variable types, requirements, and status
+- Provides methods to query and update environment variables
+- Integrates with the shell service for script execution
+
+### Environment Status Provider
+
+Provides comprehensive status information:
+
+- Lists all environment variables by plugin
+- Shows which variables are missing, valid, or invalid
+- Indicates which variables can be auto-generated
+- Provides recommendations for next steps
+
+### Set Environment Variable Action
+
+Handles user input for environment variables:
+
+- Extracts variable assignments from natural language
+- Validates and updates multiple variables at once
+- Provides feedback on validation results
+- Guides users through the configuration process
+
+### Generate Environment Variable Action
+
+Automatically generates variables when possible:
+
+- Creates cryptographic keys (RSA, Ed25519)
+- Generates secrets (JWT secrets, encryption keys, UUIDs)
+- Handles dependency installation for generation scripts
+- Validates generated values before setting them
+
+## Supported Variable Types
+
+### Auto-Generatable
+
+- **Private Keys**: RSA, Ed25519 cryptographic keys
+- **Secrets**: JWT secrets, encryption keys, session secrets
+- **UUIDs**: Unique identifiers
+- **Config Values**: Port numbers, database names
+
+### User-Required
+
+- **API Keys**: OpenAI, Groq, Anthropic, Twitter, Discord, etc.
+- **Tokens**: Authentication tokens from external services
+- **URLs**: Webhook endpoints, API endpoints
+- **Credentials**: Database URLs, service credentials
+
+## Usage Examples
+
+### Agent Interaction
+
+```
+Agent: "I've detected that the OpenAI plugin requires OPENAI_API_KEY. I can auto-generate
+        some variables, but this one needs to be provided by you. You can get an API key
+        from https://platform.openai.com/"
+
+User: "Set OPENAI_API_KEY to sk-1234567890abcdef"
+
+Agent: "✅ OPENAI_API_KEY validated successfully! The OpenAI plugin is now configured
+        and ready to use."
 ```
 
-## Development
+### Auto-Generation
 
-```bash
-# Start development with hot-reloading (recommended)
-elizaos dev
-
-# OR start without hot-reloading
-elizaos start
-# Note: When using 'start', you need to rebuild after changes:
-# bun run build
-
-# Test the plugin
-elizaos test
 ```
+Agent: "I need to set up some security keys. Let me generate those automatically..."
 
-## Testing
-
-ElizaOS provides a comprehensive testing structure for plugins:
-
-### Test Structure
-
-- **Component Tests** (`__tests__/` directory):
-
-  - **Unit Tests**: Test individual functions/classes in isolation
-  - **Integration Tests**: Test how components work together
-  - Run with: `elizaos test component`
-
-- **End-to-End Tests** (`e2e/` directory):
-
-  - Test the plugin within a full ElizaOS runtime
-  - Run with: `elizaos test e2e`
-
-- **Running All Tests**:
-  - `elizaos test` runs both component and e2e tests
-
-### Writing Tests
-
-Component tests use Vitest:
-
-```typescript
-// Unit test example (__tests__/plugin.test.ts)
-describe('Plugin Configuration', () => {
-  it('should have correct plugin metadata', () => {
-    expect(starterPlugin.name).toBe('plugin-starter');
-  });
-});
-
-// Integration test example (__tests__/integration.test.ts)
-describe('Integration: HelloWorld Action with StarterService', () => {
-  it('should handle HelloWorld action with StarterService', async () => {
-    // Test interactions between components
-  });
-});
-```
-
-E2E tests use ElizaOS test interface:
-
-```typescript
-// E2E test example (e2e/starter-plugin.test.ts)
-export class StarterPluginTestSuite implements TestSuite {
-  name = 'plugin_starter_test_suite';
-  tests = [
-    {
-      name: 'example_test',
-      fn: async (runtime) => {
-        // Test plugin in a real runtime
-      },
-    },
-  ];
-}
-
-export default new StarterPluginTestSuite();
-```
-
-The test utilities in `__tests__/test-utils.ts` provide mock objects and setup functions to simplify writing tests.
-
-## Publishing & Continuous Development
-
-### Initial Setup
-
-Before publishing your plugin, ensure you meet these requirements:
-
-1. **npm Authentication**
-
-   ```bash
-   npm login
-   ```
-
-2. **GitHub Repository**
-
-   - Create a public GitHub repository for this plugin
-   - Add the 'elizaos-plugins' topic to the repository
-   - Use 'main' as the default branch
-
-3. **Required Assets**
-   - Add images to the `images/` directory:
-     - `logo.jpg` (400x400px square, <500KB)
-     - `banner.jpg` (1280x640px, <1MB)
-
-### Initial Publishing
-
-```bash
-# Test your plugin meets all requirements
-elizaos publish --test
-
-# Publish to npm + GitHub + registry (recommended)
-elizaos publish
-```
-
-This command will:
-
-- Publish your plugin to npm for easy installation
-- Create/update your GitHub repository
-- Submit your plugin to the ElizaOS registry for discoverability
-
-### Continuous Development & Updates
-
-**Important**: After your initial publish with `elizaos publish`, all future updates should be done using standard npm and git workflows, not the ElizaOS CLI.
-
-#### Standard Update Workflow
-
-1. **Make Changes**
-
-   ```bash
-   # Edit your plugin code
-   elizaos dev  # Test locally with hot-reload
-   ```
-
-2. **Test Your Changes**
-
-   ```bash
-   # Run all tests
-   elizaos test
-
-   # Run specific test types if needed
-   elizaos test component  # Component tests only
-   elizaos test e2e       # E2E tests only
-   ```
-
-3. **Update Version**
-
-   ```bash
-   # Patch version (bug fixes): 1.0.0 → 1.0.1
-   npm version patch
-
-   # Minor version (new features): 1.0.1 → 1.1.0
-   npm version minor
-
-   # Major version (breaking changes): 1.1.0 → 2.0.0
-   npm version major
-   ```
-
-4. **Publish to npm**
-
-   ```bash
-   npm publish
-   ```
-
-5. **Push to GitHub**
-   ```bash
-   git push origin main
-   git push --tags  # Push version tags
-   ```
-
-#### Why Use Standard Workflows?
-
-- **npm publish**: Directly updates your package on npm registry
-- **git push**: Updates your GitHub repository with latest code
-- **Automatic registry updates**: The ElizaOS registry automatically syncs with npm, so no manual registry updates needed
-- **Standard tooling**: Uses familiar npm/git commands that work with all development tools
-
-### Alternative Publishing Options (Initial Only)
-
-```bash
-# Publish to npm only (skip GitHub and registry)
-elizaos publish --npm
-
-# Publish but skip registry submission
-elizaos publish --skip-registry
-
-# Generate registry files locally without publishing
-elizaos publish --dry-run
+Agent: "🎉 Successfully generated 3 environment variables!
+        ✅ JWT_SECRET: Generated and validated successfully
+        ✅ ENCRYPTION_KEY: Generated and validated successfully
+        ✅ SESSION_SECRET: Generated and validated successfully"
 ```
 
 ## Configuration
 
-The `agentConfig` section in `package.json` defines the parameters your plugin requires:
+Environment variables are stored in `world.metadata.envVars` with the following structure:
 
-```json
-"agentConfig": {
-  "pluginType": "elizaos:plugin:1.0.0",
-  "pluginParameters": {
-    "API_KEY": {
-      "type": "string",
-      "description": "API key for the service"
+```typescript
+{
+  [pluginName]: {
+    [variableName]: {
+      value?: string;
+      type: 'api_key' | 'private_key' | 'secret' | 'config' | 'url' | 'credential';
+      required: boolean;
+      description: string;
+      canGenerate: boolean;
+      status: 'missing' | 'generating' | 'validating' | 'invalid' | 'valid';
+      attempts: number;
+      createdAt: number;
+      validatedAt?: number;
+      lastError?: string;
     }
   }
 }
 ```
 
-Customize this section to match your plugin's requirements.
+## Validation Strategies
 
-## Documentation
+The plugin includes validation strategies for different variable types:
 
-Provide clear documentation about:
+- **API Keys**: Test actual API calls to verify functionality
+- **Private Keys**: Validate format and test encryption/decryption
+- **URLs**: Check connectivity and response codes
+- **Credentials**: Validate format and basic connectivity
 
-- What your plugin does
-- How to use it
-- Required API keys or credentials
-- Example usage
-- Version history and changelog
+## Security Features
+
+- **Encrypted Storage**: Sensitive values are handled securely
+- **Audit Trail**: All changes are logged with timestamps
+- **Validation**: Variables are tested before being marked as valid
+- **Sandboxing**: Generation scripts run in isolated environments
+- **No Logging**: Sensitive values are never logged in full
+
+## Integration
+
+The plugin integrates seamlessly with:
+
+- **Shell Service**: For executing generation scripts
+- **Character Settings**: Scans character.settings.secrets
+- **Plugin System**: Detects requirements from loaded plugins
+- **World Metadata**: Persistent storage following established patterns
+
+## Error Handling
+
+Comprehensive error handling includes:
+
+- **Generation Failures**: Retry with different approaches, fallback to user input
+- **Validation Failures**: Clear error messages with troubleshooting guidance
+- **User Input Errors**: Format validation with helpful examples
+- **Service Failures**: Graceful degradation with informative messages
+
+## Future Enhancements
+
+Potential future improvements:
+
+- **Plugin Manifest Scanning**: Automatic detection from plugin.json files
+- **Environment Profiles**: Different configurations for dev/staging/prod
+- **Backup/Restore**: Export/import environment configurations
+- **Rotation**: Automatic key rotation for security
+- **Monitoring**: Health checks and expiration warnings
+
+## Development
+
+To extend the plugin:
+
+1. **Add Variable Types**: Update `types.ts` and generation templates
+2. **Add Validation**: Implement new validation strategies in `validation.ts`
+3. **Add Generation**: Create new script templates in `generation.ts`
+4. **Test**: Use the existing test patterns for new functionality
+
+The plugin is designed to be extensible and follows the established patterns in the Eliza codebase for consistency and maintainability.
