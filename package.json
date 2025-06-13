@@ -1,6 +1,6 @@
 {
-  "name": "@elizaos/plugin-env",
-  "description": "Environment management plugin for ElizaOS",
+  "name": "@elizaos/plugin-secrets-manager",
+  "description": "Secret management plugin for ElizaOS",
   "version": "1.0.0",
   "type": "module",
   "private": true,
