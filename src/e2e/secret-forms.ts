@@ -1,16 +1,13 @@
 import {
   type IAgentRuntime,
-  type TestConfig,
-  type TestResult,
-  type TestResultStatus,
   type TestSuite,
-  logger,
+  logger
 } from '@elizaos/core';
-import { SecretFormService } from '../services/secret-form-service';
-import { NgrokService } from '../services/ngrok-service';
-import { EnhancedSecretManager } from '../enhanced-service';
-import type { SecretContext } from '../types';
 import puppeteer, { Browser, Page } from 'puppeteer';
+import { EnhancedSecretManager } from '../enhanced-service';
+import { NgrokService } from '../services/ngrok-service';
+import { SecretFormService } from '../services/secret-form-service';
+import type { SecretContext } from '../types';
 
 /**
  * E2E Test Suite for Secret Form functionality
@@ -18,14 +15,11 @@ import puppeteer, { Browser, Page } from 'puppeteer';
  */
 export const secretFormsSuite: TestSuite = {
   name: 'Secret Forms E2E Tests',
-  description: 'End-to-end tests for secure secret collection forms',
 
   tests: [
     {
       name: 'Create and Submit Basic Secret Form',
-      description: 'Create a form, access it via ngrok tunnel, submit data, and verify storage',
-
-      async run(runtime: IAgentRuntime): Promise<TestResult> {
+      async fn(runtime: IAgentRuntime): Promise<void> {
         let browser: Browser | null = null;
         let page: Page | null = null;
 
@@ -52,7 +46,6 @@ export const secretFormsSuite: TestSuite = {
               },
             ],
             title: 'Test Secret Form',
-            description: 'E2E test form',
             mode: 'requester' as const,
             expiresIn: 5 * 60 * 1000, // 5 minutes
           };
@@ -120,17 +113,9 @@ export const secretFormsSuite: TestSuite = {
             throw new Error('Secret not stored correctly');
           }
 
-          return {
-            status: 'passed' as TestResultStatus,
-            message: 'Form created, submitted, and secret stored successfully',
-          };
         } catch (error) {
           logger.error('[E2E Test] Error:', error);
-          return {
-            status: 'failed' as TestResultStatus,
-            message: `Test failed: ${error.message}`,
-            error: error instanceof Error ? error : new Error(String(error)),
-          };
+          throw error;
         } finally {
           // Cleanup
           if (page) await page.close();
@@ -141,9 +126,7 @@ export const secretFormsSuite: TestSuite = {
 
     {
       name: 'Test Form Expiration',
-      description: 'Verify that forms expire after the specified time',
-
-      async run(runtime: IAgentRuntime): Promise<TestResult> {
+      async fn(runtime: IAgentRuntime): Promise<void> {
         try {
           const formService = runtime.getService('SECRET_FORMS') as SecretFormService;
 
@@ -181,25 +164,15 @@ export const secretFormsSuite: TestSuite = {
             throw new Error('Form should have expired');
           }
 
-          return {
-            status: 'passed' as TestResultStatus,
-            message: 'Form expiration working correctly',
-          };
         } catch (error) {
-          return {
-            status: 'failed' as TestResultStatus,
-            message: `Test failed: ${error.message}`,
-            error: error instanceof Error ? error : new Error(String(error)),
-          };
+          throw error;
         }
       },
     },
 
     {
       name: 'Test Multiple Secret Fields',
-      description: 'Create and submit a form with multiple secret fields',
-
-      async run(runtime: IAgentRuntime): Promise<TestResult> {
+      async fn(runtime: IAgentRuntime): Promise<void> {
         let browser: Browser | null = null;
         let page: Page | null = null;
 
@@ -277,16 +250,8 @@ export const secretFormsSuite: TestSuite = {
             throw new Error('Not all secrets were stored correctly');
           }
 
-          return {
-            status: 'passed' as TestResultStatus,
-            message: 'Multiple secrets form working correctly',
-          };
         } catch (error) {
-          return {
-            status: 'failed' as TestResultStatus,
-            message: `Test failed: ${error.message}`,
-            error: error instanceof Error ? error : new Error(String(error)),
-          };
+          throw error;
         } finally {
           if (page) await page.close();
           if (browser) await browser.close();
@@ -296,9 +261,7 @@ export const secretFormsSuite: TestSuite = {
 
     {
       name: 'Test Form Validation',
-      description: 'Verify form validation prevents invalid submissions',
-
-      async run(runtime: IAgentRuntime): Promise<TestResult> {
+      async fn(runtime: IAgentRuntime): Promise<void> {
         let browser: Browser | null = null;
         let page: Page | null = null;
 
@@ -346,16 +309,8 @@ export const secretFormsSuite: TestSuite = {
             throw new Error('Form validation not working');
           }
 
-          return {
-            status: 'passed' as TestResultStatus,
-            message: 'Form validation working correctly',
-          };
         } catch (error) {
-          return {
-            status: 'failed' as TestResultStatus,
-            message: `Test failed: ${error.message}`,
-            error: error instanceof Error ? error : new Error(String(error)),
-          };
+          throw error;
         } finally {
           if (page) await page.close();
           if (browser) await browser.close();
@@ -365,9 +320,7 @@ export const secretFormsSuite: TestSuite = {
 
     {
       name: 'Test Ngrok Tunnel Management',
-      description: 'Verify ngrok tunnels are created and cleaned up properly',
-
-      async run(runtime: IAgentRuntime): Promise<TestResult> {
+      async fn(runtime: IAgentRuntime): Promise<void> {
         try {
           const ngrokService = runtime.getService('NGROK') as NgrokService;
           const formService = runtime.getService('SECRET_FORMS') as SecretFormService;
@@ -416,75 +369,10 @@ export const secretFormsSuite: TestSuite = {
             throw new Error('Tunnel was not cleaned up');
           }
 
-          return {
-            status: 'passed' as TestResultStatus,
-            message: 'Ngrok tunnel management working correctly',
-          };
         } catch (error) {
-          return {
-            status: 'failed' as TestResultStatus,
-            message: `Test failed: ${error.message}`,
-            error: error instanceof Error ? error : new Error(String(error)),
-          };
+          throw error;
         }
       },
     },
   ],
-
-  async setup(runtime: IAgentRuntime): Promise<void> {
-    logger.info('[SecretForms E2E] Setting up test environment');
-
-    // Ensure services are available
-    const ngrokService = runtime.getService('NGROK');
-    const formService = runtime.getService('SECRET_FORMS');
-    const secretsManager = runtime.getService('SECRETS');
-
-    if (!ngrokService || !formService || !secretsManager) {
-      throw new Error('Required services not available for secret forms tests');
-    }
-
-    // Check if puppeteer is available
-    try {
-      await import('puppeteer');
-    } catch (error) {
-      throw new Error(
-        'Puppeteer is required for E2E form tests. Please install it: npm install puppeteer'
-      );
-    }
-  },
-
-  async teardown(runtime: IAgentRuntime): Promise<void> {
-    logger.info('[SecretForms E2E] Cleaning up test environment');
-
-    // Clean up any test data
-    const secretsManager = runtime.getService('SECRETS') as EnhancedSecretManager;
-    if (secretsManager) {
-      // Clean up test secrets
-      const testUserIds = ['test-user-123', 'test-user-multi', 'test-user-validation'];
-      for (const userId of testUserIds) {
-        const context: SecretContext = {
-          level: 'user',
-          userId,
-          agentId: runtime.agentId,
-          requesterId: runtime.agentId,
-        };
-
-        // Delete test secrets
-        const testKeys = [
-          'TEST_API_KEY',
-          'OPENAI_KEY',
-          'WEBHOOK_URL',
-          'CONFIG_JSON',
-          'API_KEY_VALIDATED',
-        ];
-        for (const key of testKeys) {
-          try {
-            await secretsManager.set(key, null, context); // Set to null to delete
-          } catch (error) {
-            // Ignore errors during cleanup
-          }
-        }
-      }
-    }
-  },
 };

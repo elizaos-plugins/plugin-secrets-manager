@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { requestSecretFormAction } from '../actions/requestSecretForm';
-import type { IAgentRuntime, Memory, HandlerCallback } from '@elizaos/core';
+import type { IAgentRuntime, Memory, HandlerCallback, State } from '@elizaos/core';
 import { SecretFormService } from '../services/secret-form-service';
 
 // Mock dependencies
@@ -26,29 +26,29 @@ describe('requestSecretFormAction', () => {
   let mockRuntime: IAgentRuntime;
   let mockFormService: SecretFormService;
   let mockCallback: HandlerCallback;
+  let mockState: State;
 
   beforeEach(() => {
     vi.clearAllMocks();
 
-    // Create mock form service
     mockFormService = {
       createSecretForm: vi.fn().mockResolvedValue({
         url: 'https://test.ngrok.io/form/123',
-        sessionId: 'session-123',
+        sessionId: '123',
       }),
     } as any;
 
-    // Create mock runtime
     mockRuntime = {
-      agentId: 'agent-123',
-      getService: vi.fn((type: string) => {
-        if (type === 'SECRET_FORMS') return mockFormService;
-        return null;
-      }),
+      getService: vi.fn().mockReturnValue(mockFormService),
     } as any;
 
-    // Create mock callback
     mockCallback = vi.fn();
+
+    mockState = {
+      values: {},
+      data: {},
+      text: '',
+    };
   });
 
   describe('validate', () => {
@@ -113,15 +113,8 @@ describe('requestSecretFormAction', () => {
         entityId: 'user-123',
       } as any;
 
-      const result = await requestSecretFormAction.handler(
-        mockRuntime,
-        message,
-        {},
-        {},
-        mockCallback
-      );
+      await requestSecretFormAction.handler(mockRuntime, message, mockState, {}, mockCallback);
 
-      expect(result).toBe(true);
       expect(mockFormService.createSecretForm).toHaveBeenCalledWith(
         expect.objectContaining({
           secrets: expect.arrayContaining([
@@ -162,7 +155,7 @@ describe('requestSecretFormAction', () => {
         entityId: 'user-123',
       } as any;
 
-      await requestSecretFormAction.handler(mockRuntime, message, {}, {}, mockCallback);
+      await requestSecretFormAction.handler(mockRuntime, message, mockState, {}, mockCallback);
 
       const formCall = vi.mocked(mockFormService.createSecretForm).mock.calls[0];
       const request = formCall[0];
@@ -179,7 +172,7 @@ describe('requestSecretFormAction', () => {
         entityId: 'user-123',
       } as any;
 
-      await requestSecretFormAction.handler(mockRuntime, message, {}, {}, mockCallback);
+      await requestSecretFormAction.handler(mockRuntime, message, mockState, {}, mockCallback);
 
       const formCall = vi.mocked(mockFormService.createSecretForm).mock.calls[0];
       const request = formCall[0];
@@ -215,7 +208,7 @@ describe('requestSecretFormAction', () => {
         entityId: 'user-123',
       } as any;
 
-      await requestSecretFormAction.handler(mockRuntime, message, {}, {}, mockCallback);
+      await requestSecretFormAction.handler(mockRuntime, message, mockState, {}, mockCallback);
 
       const formCall = vi.mocked(mockFormService.createSecretForm).mock.calls[0];
       const request = formCall[0];
@@ -236,7 +229,7 @@ describe('requestSecretFormAction', () => {
         entityId: 'user-123',
       } as any;
 
-      await requestSecretFormAction.handler(mockRuntime, message, {}, {}, mockCallback);
+      await requestSecretFormAction.handler(mockRuntime, message, mockState, {}, mockCallback);
 
       const formCall = vi.mocked(mockFormService.createSecretForm).mock.calls[0];
       const request = formCall[0];
@@ -254,7 +247,7 @@ describe('requestSecretFormAction', () => {
         entityId: 'user-123',
       } as any;
 
-      await requestSecretFormAction.handler(mockRuntime, message, {}, {}, mockCallback);
+      await requestSecretFormAction.handler(mockRuntime, message, mockState, {}, mockCallback);
 
       const formCall = vi.mocked(mockFormService.createSecretForm).mock.calls[0];
       const request = formCall[0];
@@ -268,7 +261,7 @@ describe('requestSecretFormAction', () => {
         entityId: 'user-123',
       } as any;
 
-      await requestSecretFormAction.handler(mockRuntime, message, {}, {}, mockCallback);
+      await requestSecretFormAction.handler(mockRuntime, message, mockState, {}, mockCallback);
 
       const formCall = vi.mocked(mockFormService.createSecretForm).mock.calls[0];
       const request = formCall[0];
@@ -286,7 +279,7 @@ describe('requestSecretFormAction', () => {
         entityId: 'user-123',
       } as any;
 
-      await requestSecretFormAction.handler(mockRuntime, message, {}, {}, mockCallback);
+      await requestSecretFormAction.handler(mockRuntime, message, mockState, {}, mockCallback);
 
       const formCall = vi.mocked(mockFormService.createSecretForm).mock.calls[0];
       const request = formCall[0];
@@ -311,7 +304,7 @@ describe('requestSecretFormAction', () => {
       const result = await requestSecretFormAction.handler(
         mockRuntime,
         message,
-        {},
+        mockState,
         {},
         mockCallback
       );
@@ -337,7 +330,7 @@ describe('requestSecretFormAction', () => {
       const result = await requestSecretFormAction.handler(
         mockRuntime,
         message,
-        {},
+        mockState,
         {},
         mockCallback
       );
@@ -366,7 +359,7 @@ describe('requestSecretFormAction', () => {
       const result = await requestSecretFormAction.handler(
         mockRuntime,
         message,
-        {},
+        mockState,
         {},
         mockCallback
       );
@@ -388,7 +381,7 @@ describe('requestSecretFormAction', () => {
         entityId: 'user-123',
       } as any;
 
-      await requestSecretFormAction.handler(mockRuntime, message, {}, {}, mockCallback);
+      await requestSecretFormAction.handler(mockRuntime, message, mockState, {}, mockCallback);
 
       const formCall = vi.mocked(mockFormService.createSecretForm).mock.calls[0];
       const request = formCall[0];
@@ -412,7 +405,7 @@ describe('requestSecretFormAction', () => {
         entityId: 'user-123',
       } as any;
 
-      await requestSecretFormAction.handler(mockRuntime, message, {}, {}, mockCallback);
+      await requestSecretFormAction.handler(mockRuntime, message, mockState, {}, mockCallback);
 
       // Verify createSecretForm was called
       expect(mockFormService.createSecretForm).toHaveBeenCalled();

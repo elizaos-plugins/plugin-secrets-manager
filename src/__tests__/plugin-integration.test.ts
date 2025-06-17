@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import envPlugin from '../index';
-import type { IAgentRuntime, Plugin, Service, World } from '@elizaos/core';
+import type { IAgentRuntime, Plugin, Service, World, UUID } from '@elizaos/core';
 import { EnhancedSecretManager } from '../enhanced-service';
 import { NgrokService } from '../services/ngrok-service';
 import { SecretFormService } from '../services/secret-form-service';
@@ -12,6 +12,45 @@ const uuidv4 = () => {
     const v = c === 'x' ? r : (r & 0x3) | 0x8;
     return v.toString(16);
   });
+};
+
+const createMockRuntime = (): IAgentRuntime => {
+  const worlds = new Map<string, any>();
+  const components = new Map<string, any>();
+
+  return {
+    agentId: 'agent-123' as UUID,
+    getSetting: vi.fn((key: string) => {
+      const settings: Record<string, string> = {
+        ENCRYPTION_SALT: 'test-salt',
+        NGROK_AUTH_TOKEN: 'test-ngrok-token',
+      };
+      return settings[key] || null;
+    }),
+    db: {
+      getWorlds: vi.fn(async () => Array.from(worlds.values())),
+      createWorld: vi.fn(async (world: any) => worlds.set(world.id, world)),
+      updateWorld: vi.fn(async (world: any) => worlds.set(world.id, world)),
+      getWorld: vi.fn(async (id: any) => worlds.get(id) || null),
+      getComponents: vi.fn(async (entityId: any) => components.get(entityId) || []),
+      createComponent: vi.fn(async (component: any) => {
+        const userComponents = components.get(component.entityId) || [];
+        userComponents.push(component);
+        components.set(component.entityId, userComponents);
+      }),
+      updateComponent: vi.fn(async (component: any) => {
+        const userComponents = components.get(component.entityId) || [];
+        const index = userComponents.findIndex((c: any) => c.id === component.id);
+        if (index !== -1) {
+          userComponents[index] = component;
+        } else {
+          userComponents.push(component);
+        }
+        components.set(component.entityId, userComponents);
+      }),
+    },
+    // ... other runtime properties
+  } as any;
 };
 
 // Mock dependencies
@@ -34,63 +73,13 @@ describe('Secrets Manager Plugin Integration', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockRuntime = createMockRuntime();
     registeredServices = new Map();
-
-    // Mock storage for worlds and components
-    const worlds = new Map<string, any>();
-    const components = new Map<string, any[]>();
-
-    // Create mock runtime with minimal required functionality
-    mockRuntime = {
-      agentId: 'agent-123',
-      getSetting: vi.fn((key: string) => {
-        const settings: Record<string, string> = {
-          ENCRYPTION_KEY: 'test-encryption-key-32-chars-long!!',
-          ENCRYPTION_SALT: 'test-salt',
-          NGROK_AUTH_TOKEN: 'test-ngrok-token',
-        };
-        return settings[key] || null;
-      }),
-      db: {
-        getWorlds: vi.fn(async () => []),
-      },
-      registerService: vi.fn((ServiceClass: any) => {
-        const instance = new ServiceClass(mockRuntime);
-        registeredServices.set(ServiceClass.serviceType, instance);
-      }),
-      getService: vi.fn((type: string) => {
-        return registeredServices.get(type);
-      }),
-      getWorld: vi.fn(async (worldId: string) => {
-        return worlds.get(worldId) || null;
-      }),
-      updateWorld: vi.fn(async (world: any) => {
-        worlds.set(world.id, world);
-      }),
-      getComponents: vi.fn(async (query: any) => {
-        const entityComponents = components.get(query.entityId) || [];
-        return entityComponents.filter((c) => !query.type || c.type === query.type);
-      }),
-      createComponent: vi.fn(async (component: any) => {
-        const entityComponents = components.get(component.entityId) || [];
-        const fullComponent = {
-          ...component,
-          id: `comp-${Date.now()}-${Math.random()}`,
-          createdAt: Date.now(),
-        };
-        entityComponents.push(fullComponent);
-        components.set(component.entityId, entityComponents);
-        return fullComponent;
-      }),
-      updateComponent: vi.fn(async (component: any) => {
-        const entityComponents = components.get(component.entityId) || [];
-        const index = entityComponents.findIndex((c) => c.id === component.id);
-        if (index !== -1) {
-          entityComponents[index] = component;
-        }
-        components.set(component.entityId, entityComponents);
-      }),
-    } as any;
+    mockRuntime.registerService = vi.fn((ServiceClass: any) => {
+      const instance = new ServiceClass(mockRuntime);
+      registeredServices.set(ServiceClass.serviceType, instance);
+    });
+    mockRuntime.getService = vi.fn((type: string) => registeredServices.get(type));
   });
 
   describe('Plugin Structure', () => {

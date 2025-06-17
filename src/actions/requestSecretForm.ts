@@ -219,47 +219,50 @@ function extractRequestParams(text: string): RequestSecretFormParams {
   // Extract common secret types - MOST SPECIFIC FIRST
   const secretPatterns = [
     {
-      pattern: /openai\s*(?:api\s*)?key/i,
+      pattern: /openai\s*(?:api\s*)?key/gi,
       key: 'OPENAI_API_KEY',
       type: 'api_key',
       description: 'OpenAI API Key',
     },
     {
-      pattern: /anthropic\s*(?:api\s*)?key/i,
+      pattern: /anthropic\s*(?:api\s*)?key/gi,
       key: 'ANTHROPIC_API_KEY',
       type: 'api_key',
       description: 'Anthropic API Key',
     },
     {
-      pattern: /groq\s*(?:api\s*)?key/i,
+      pattern: /groq\s*(?:api\s*)?key/gi,
       key: 'GROQ_API_KEY',
       type: 'api_key',
       description: 'Groq API Key',
     },
-    { pattern: /webhook\s*(?:url)?/i, key: 'WEBHOOK_URL', type: 'url', description: 'Webhook URL' },
     {
-      pattern: /credit\s*card/i,
+      pattern: /webhook\s*(?:url)?/gi,
+      key: 'WEBHOOK_URL',
+      type: 'url',
+      description: 'Webhook URL',
+    },
+    {
+      pattern: /credit\s*card/gi,
       key: 'CREDIT_CARD',
       type: 'creditcard',
       description: 'Credit Card Number',
     },
     {
-      pattern: /private\s*key/i,
+      pattern: /private\s*key/gi,
       key: 'PRIVATE_KEY',
       type: 'private_key',
       description: 'Private Key',
     },
-    { pattern: /api\s*key/i, key: 'API_KEY', type: 'api_key', description: 'API Key' },
-    { pattern: /password/i, key: 'PASSWORD', type: 'credential', description: 'Password' },
-    { pattern: /token/i, key: 'TOKEN', type: 'api_key', description: 'Access Token' },
-    { pattern: /secret/i, key: 'SECRET', type: 'secret', description: 'Secret Value' },
+    { pattern: /api\s*key/gi, key: 'API_KEY', type: 'api_key', description: 'API Key' },
+    { pattern: /password/gi, key: 'PASSWORD', type: 'credential', description: 'Password' },
+    { pattern: /token/gi, key: 'TOKEN', type: 'api_key', description: 'Access Token' },
+    { pattern: /secret/gi, key: 'SECRET', type: 'secret', description: 'Secret Value' },
   ];
 
-  // Find matching secrets in the text
-  let textToProcess = text;
+  // Find all unique matching secrets in the text
   for (const secretPattern of secretPatterns) {
-    if (secretPattern.pattern.test(textToProcess)) {
-      // Avoid duplicates
+    if (secretPattern.pattern.test(text)) {
       const exists = params.secrets.some((s) => s.key === secretPattern.key);
       if (!exists) {
         params.secrets.push({
@@ -268,14 +271,12 @@ function extractRequestParams(text: string): RequestSecretFormParams {
           description: secretPattern.description,
           required: true,
         });
-        // Remove the matched part to avoid sub-matches (e.g., "API key" matching after "OpenAI API key")
-        textToProcess = textToProcess.replace(secretPattern.pattern, '');
       }
     }
   }
 
-  // If no specific secrets found, add a generic one
-  if (params.secrets.length === 0) {
+  // If no specific secrets found after checking all patterns, add a generic one
+  if (params.secrets.length === 0 && text.match(/secret|key|token|password|credential/i)) {
     params.secrets.push({
       key: 'SECRET_VALUE',
       type: 'secret',

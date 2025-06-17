@@ -46,6 +46,8 @@
     "@elizaos/plugin-discord": "github:elizaos-plugins/plugin-discord#v1.0.10",
     "@elizaos/plugin-knowledge": "1.0.4",
     "@elizaos/plugin-telegram": "github:elizaos-plugins/plugin-telegram#v1.0.2",
+    "ngrok": "^5.0.0-beta.2",
+    "puppeteer": "^24.10.1",
     "zod": "3.24.2"
   },
   "peerDependencies": {},

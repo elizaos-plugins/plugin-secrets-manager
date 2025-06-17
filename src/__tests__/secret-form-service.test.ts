@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { SecretFormService } from '../services/secret-form-service';
 import { NgrokService } from '../services/ngrok-service';
 import { EnhancedSecretManager } from '../enhanced-service';
-import type { IAgentRuntime } from '@elizaos/core';
+import type { IAgentRuntime, UUID, Service } from '@elizaos/core';
 import type { SecretFormRequest, FormSubmission } from '../types/form';
 import type { SecretContext } from '../types';
 import express from 'express';
@@ -41,7 +41,7 @@ vi.mock('path', () => ({
 }));
 
 describe('SecretFormService', () => {
-  let service: SecretFormService;
+  let formService: SecretFormService;
   let mockRuntime: IAgentRuntime;
   let mockNgrokService: NgrokService;
   let mockSecretsManager: EnhancedSecretManager;
@@ -59,32 +59,24 @@ describe('SecretFormService', () => {
     vi.mocked(express).mockReturnValue(mockApp);
 
     // Create mock services
-    mockNgrokService = {
-      createTunnel: vi.fn().mockResolvedValue({
-        id: 'tunnel-123',
-        url: 'https://test.ngrok.io',
-      }),
-      closeTunnel: vi.fn().mockResolvedValue(undefined),
-      getTunnel: vi.fn(),
-      getActiveTunnels: vi.fn().mockReturnValue([]),
-    } as any;
-
-    mockSecretsManager = {
-      set: vi.fn().mockResolvedValue(true),
-      get: vi.fn(),
-    } as any;
+    mockNgrokService = new NgrokService(mockRuntime);
+    mockSecretsManager = new EnhancedSecretManager(mockRuntime);
 
     // Create mock runtime
     mockRuntime = {
-      agentId: 'test-agent-123',
-      getService: vi.fn((type: string) => {
-        if (type === 'NGROK') return mockNgrokService;
-        if (type === 'SECRETS') return mockSecretsManager;
+      agentId: 'agent-123' as UUID,
+      getService: (<T extends Service>(name: string): T | null => {
+        if (name === 'NGROK') return mockNgrokService as T;
+        if (name === 'SECRETS') return mockSecretsManager as T;
         return null;
-      }),
+      }) as any,
     } as any;
 
-    service = new SecretFormService(mockRuntime);
+    formService = new SecretFormService(mockRuntime);
+
+    // Manually set the services after instantiation
+    (formService as any).ngrokService = mockNgrokService;
+    (formService as any).secretsManager = mockSecretsManager;
   });
 
   afterEach(() => {
@@ -94,7 +86,7 @@ describe('SecretFormService', () => {
 
   describe('start', () => {
     it('should initialize with required services', async () => {
-      await service.start();
+      await formService.start();
 
       expect(mockRuntime.getService).toHaveBeenCalledWith('NGROK');
       expect(mockRuntime.getService).toHaveBeenCalledWith('SECRETS');
@@ -106,7 +98,7 @@ describe('SecretFormService', () => {
         return mockSecretsManager;
       });
 
-      await expect(service.start()).rejects.toThrow('NgrokService is required');
+      await expect(formService.start()).rejects.toThrow('NgrokService is required');
     });
 
     it('should throw if SecretManager is not available', async () => {
@@ -115,13 +107,13 @@ describe('SecretFormService', () => {
         return mockNgrokService;
       });
 
-      await expect(service.start()).rejects.toThrow('EnhancedSecretManager is required');
+      await expect(formService.start()).rejects.toThrow('EnhancedSecretManager is required');
     });
 
     it('should start cleanup interval', async () => {
       const setIntervalSpy = vi.spyOn(global, 'setInterval');
 
-      await service.start();
+      await formService.start();
 
       expect(setIntervalSpy).toHaveBeenCalledWith(expect.any(Function), 60 * 1000);
     });
@@ -129,7 +121,7 @@ describe('SecretFormService', () => {
 
   describe('createSecretForm', () => {
     beforeEach(async () => {
-      await service.start();
+      await formService.start();
     });
 
     it('should create a basic secret form', async () => {
@@ -153,7 +145,7 @@ describe('SecretFormService', () => {
         agentId: 'agent-123',
       };
 
-      const result = await service.createSecretForm(request, context);
+      const result = await formService.createSecretForm(request, context);
 
       expect(result).toEqual({
         url: expect.stringMatching(/^https:\/\/test\.ngrok\.io\/form\/.+$/),
@@ -183,7 +175,7 @@ describe('SecretFormService', () => {
         agentId: 'agent-123',
       };
 
-      await service.createSecretForm(request, context);
+      await formService.createSecretForm(request, context);
 
       expect(mockNgrokService.createTunnel).toHaveBeenCalledWith(
         expect.any(Number),
@@ -208,7 +200,7 @@ describe('SecretFormService', () => {
         agentId: 'agent-123',
       };
 
-      const { sessionId } = await service.createSecretForm(request, context);
+      const { sessionId } = await formService.createSecretForm(request, context);
 
       expect(mockApp.get).toHaveBeenCalledWith(`/form/${sessionId}`, expect.any(Function));
 
@@ -240,10 +232,10 @@ describe('SecretFormService', () => {
         agentId: 'agent-123',
       };
 
-      const { sessionId } = await service.createSecretForm(request, context, mockCallback);
+      const { sessionId } = await formService.createSecretForm(request, context, mockCallback);
 
       // Get the session to verify callback was stored
-      const session = service.getSession(sessionId);
+      const session = formService.getSession(sessionId);
       expect(session?.callback).toBe(mockCallback);
     });
 
@@ -265,13 +257,13 @@ describe('SecretFormService', () => {
         agentId: 'agent-123',
       };
 
-      await expect(service.createSecretForm(request, context)).rejects.toThrow('Tunnel failed');
+      await expect(formService.createSecretForm(request, context)).rejects.toThrow('Tunnel failed');
     });
   });
 
   describe('form schema generation', () => {
     beforeEach(async () => {
-      await service.start();
+      await formService.start();
     });
 
     it('should generate correct schema for multiple secrets', async () => {
@@ -305,8 +297,8 @@ describe('SecretFormService', () => {
         agentId: 'agent-123',
       };
 
-      const { sessionId } = await service.createSecretForm(request, context);
-      const session = service.getSession(sessionId);
+      const { sessionId } = await formService.createSecretForm(request, context);
+      const session = formService.getSession(sessionId);
 
       expect(session?.schema).toMatchObject({
         title: 'Multi Secret Form',
@@ -350,8 +342,8 @@ describe('SecretFormService', () => {
         agentId: 'agent-123',
       };
 
-      const { sessionId } = await service.createSecretForm(request, context);
-      const session = service.getSession(sessionId);
+      const { sessionId } = await formService.createSecretForm(request, context);
+      const session = formService.getSession(sessionId);
 
       expect(session?.schema.fields[0]).toMatchObject({
         type: 'textarea',
@@ -363,7 +355,7 @@ describe('SecretFormService', () => {
 
   describe('form HTML generation', () => {
     beforeEach(async () => {
-      await service.start();
+      await formService.start();
     });
 
     it('should generate valid HTML with correct fields', async () => {
@@ -387,7 +379,7 @@ describe('SecretFormService', () => {
         agentId: 'agent-123',
       };
 
-      const { sessionId } = await service.createSecretForm(request, context);
+      const { sessionId } = await formService.createSecretForm(request, context);
 
       // Simulate GET request to form endpoint
       let formHandler: any;
@@ -428,10 +420,10 @@ describe('SecretFormService', () => {
         agentId: 'agent-123',
       };
 
-      const { sessionId } = await service.createSecretForm(request, context);
+      const { sessionId } = await formService.createSecretForm(request, context);
 
       // Mark session as expired
-      const session = service.getSession(sessionId);
+      const session = formService.getSession(sessionId);
       if (session) {
         session.status = 'expired';
       }
@@ -458,7 +450,7 @@ describe('SecretFormService', () => {
 
   describe('form submission handling', () => {
     beforeEach(async () => {
-      await service.start();
+      await formService.start();
     });
 
     it('should handle valid submission', async () => {
@@ -481,7 +473,7 @@ describe('SecretFormService', () => {
         agentId: 'agent-123',
       };
 
-      const { sessionId } = await service.createSecretForm(request, context, mockCallback);
+      const { sessionId } = await formService.createSecretForm(request, context, mockCallback);
 
       // Get submit handler
       let submitHandler: any;
@@ -543,7 +535,7 @@ describe('SecretFormService', () => {
         agentId: 'agent-123',
       };
 
-      const { sessionId } = await service.createSecretForm(request, context);
+      const { sessionId } = await formService.createSecretForm(request, context);
 
       // Get submit handler
       let submitHandler: any;
@@ -591,7 +583,7 @@ describe('SecretFormService', () => {
         agentId: 'agent-123',
       };
 
-      const { sessionId } = await service.createSecretForm(request, context);
+      const { sessionId } = await formService.createSecretForm(request, context);
 
       // Get submit handler
       let submitHandler: any;
@@ -615,14 +607,14 @@ describe('SecretFormService', () => {
       await submitHandler(mockReq, mockRes);
 
       // Session should be marked as completed
-      const session = service.getSession(sessionId);
+      const session = formService.getSession(sessionId);
       expect(session?.status).toBe('completed');
     });
   });
 
   describe('session management', () => {
     beforeEach(async () => {
-      await service.start();
+      await formService.start();
     });
 
     it('should track multiple sessions', async () => {
@@ -641,11 +633,11 @@ describe('SecretFormService', () => {
         agentId: 'agent-123',
       };
 
-      const session1 = await service.createSecretForm(request, context);
-      const session2 = await service.createSecretForm(request, context);
+      const session1 = await formService.createSecretForm(request, context);
+      const session2 = await formService.createSecretForm(request, context);
 
-      expect(service.getSession(session1.sessionId)).toBeTruthy();
-      expect(service.getSession(session2.sessionId)).toBeTruthy();
+      expect(formService.getSession(session1.sessionId)).toBeTruthy();
+      expect(formService.getSession(session2.sessionId)).toBeTruthy();
       expect(session1.sessionId).not.toBe(session2.sessionId);
     });
 
@@ -665,13 +657,13 @@ describe('SecretFormService', () => {
         agentId: 'agent-123',
       };
 
-      const { sessionId } = await service.createSecretForm(request, context);
-      const session = service.getSession(sessionId);
+      const { sessionId } = await formService.createSecretForm(request, context);
+      const session = formService.getSession(sessionId);
 
-      await service.closeSession(sessionId);
+      await formService.closeSession(sessionId);
 
       expect(mockNgrokService.closeTunnel).toHaveBeenCalledWith(session?.tunnelId);
-      expect(service.getSession(sessionId)).toBeNull();
+      expect(formService.getSession(sessionId)).toBeNull();
     });
 
     it('should handle cleanup of expired sessions', async () => {
@@ -693,15 +685,15 @@ describe('SecretFormService', () => {
         agentId: 'agent-123',
       };
 
-      const { sessionId } = await service.createSecretForm(request, context);
+      const { sessionId } = await formService.createSecretForm(request, context);
 
       // Advance time past expiration
       vi.advanceTimersByTime(2000);
 
       // Manually trigger cleanup (normally done by interval)
-      await (service as any).cleanupExpiredSessions();
+      await (formService as any).cleanupExpiredSessions();
 
-      expect(service.getSession(sessionId)).toBeNull();
+      expect(formService.getSession(sessionId)).toBeNull();
 
       vi.useRealTimers();
     });
@@ -709,7 +701,7 @@ describe('SecretFormService', () => {
 
   describe('stop', () => {
     beforeEach(async () => {
-      await service.start();
+      await formService.start();
     });
 
     it('should close all sessions on stop', async () => {
@@ -728,20 +720,20 @@ describe('SecretFormService', () => {
         agentId: 'agent-123',
       };
 
-      const session1 = await service.createSecretForm(request, context);
-      const session2 = await service.createSecretForm(request, context);
+      const session1 = await formService.createSecretForm(request, context);
+      const session2 = await formService.createSecretForm(request, context);
 
-      await service.stop();
+      await formService.stop();
 
-      expect(service.getSession(session1.sessionId)).toBeNull();
-      expect(service.getSession(session2.sessionId)).toBeNull();
+      expect(formService.getSession(session1.sessionId)).toBeNull();
+      expect(formService.getSession(session2.sessionId)).toBeNull();
       expect(mockNgrokService.closeTunnel).toHaveBeenCalledTimes(2);
     });
   });
 
   describe('security', () => {
     beforeEach(async () => {
-      await service.start();
+      await formService.start();
     });
 
     it('should sanitize HTML in form generation', async () => {
@@ -765,7 +757,7 @@ describe('SecretFormService', () => {
         agentId: 'agent-123',
       };
 
-      const { sessionId } = await service.createSecretForm(request, context);
+      const { sessionId } = await formService.createSecretForm(request, context);
 
       // Get form handler and generate HTML
       let formHandler: any;

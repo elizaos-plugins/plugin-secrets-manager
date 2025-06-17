@@ -22,9 +22,11 @@ export class NgrokService extends Service {
   private tunnels: Map<string, Tunnel> = new Map();
   private tunnelTimeouts: Map<string, NodeJS.Timeout> = new Map();
   private readonly DEFAULT_TUNNEL_DURATION = 30 * 60 * 1000; // 30 minutes
+  private ngrok: typeof ngrok;
 
-  constructor(runtime: IAgentRuntime) {
+  constructor(runtime: IAgentRuntime, ngrokModule: typeof ngrok = ngrok) {
     super(runtime);
+    this.ngrok = ngrokModule;
   }
 
   async start(): Promise<void> {
@@ -33,7 +35,7 @@ export class NgrokService extends Service {
     // Set ngrok auth token if available
     const authToken = this.runtime.getSetting('NGROK_AUTH_TOKEN');
     if (authToken) {
-      await ngrok.authtoken(authToken);
+      await this.ngrok.authtoken(authToken);
       logger.info('[NgrokService] Ngrok auth token configured');
     } else {
       logger.warn('[NgrokService] No NGROK_AUTH_TOKEN found, using anonymous tunnels (limited)');
@@ -52,7 +54,7 @@ export class NgrokService extends Service {
       logger.info(`[NgrokService] Creating tunnel for port ${port}, purpose: ${purpose}`);
 
       // Create ngrok tunnel
-      const url = await ngrok.connect({
+      const url = await this.ngrok.connect({
         addr: port,
         proto: 'http',
         region: 'us', // Can be configured
@@ -104,7 +106,7 @@ export class NgrokService extends Service {
       logger.info(`[NgrokService] Closing tunnel ${tunnelId} (${tunnel.url})`);
 
       // Disconnect ngrok tunnel
-      await ngrok.disconnect(tunnel.url);
+      await this.ngrok.disconnect(tunnel.url);
 
       // Clear timeout
       const timeout = this.tunnelTimeouts.get(tunnelId);
@@ -209,7 +211,7 @@ export class NgrokService extends Service {
     }
 
     // Kill ngrok process
-    await ngrok.kill();
+    await this.ngrok.kill();
 
     logger.info('[NgrokService] Ngrok service stopped');
   }

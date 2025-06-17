@@ -1,17 +1,23 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { NgrokService } from '../services/ngrok-service';
 import type { IAgentRuntime } from '@elizaos/core';
-import ngrok from 'ngrok';
+import type ngrok from 'ngrok';
 
-// Mock ngrok module
-vi.mock('ngrok', () => ({
-  default: {
-    connect: vi.fn(),
-    disconnect: vi.fn(),
-    kill: vi.fn(),
-    authtoken: vi.fn(),
-  },
-}));
+// Create a mock ngrok object
+const mockNgrok: typeof ngrok = {
+  connect: vi.fn(),
+  disconnect: vi.fn(),
+  kill: vi.fn(),
+  authtoken: vi.fn(),
+  getVersion: vi.fn(),
+  getApi: vi.fn(),
+  getUrl: vi.fn(),
+  defaultConfigPath: vi.fn(),
+  oldDefaultConfigPath: vi.fn(),
+  upgradeConfig: vi.fn(),
+  NgrokClient: vi.fn() as any,
+  NgrokClientError: vi.fn() as any,
+};
 
 // Mock logger
 vi.mock('@elizaos/core', async () => {
@@ -30,26 +36,15 @@ vi.mock('@elizaos/core', async () => {
 describe('NgrokService', () => {
   let service: NgrokService;
   let mockRuntime: IAgentRuntime;
-  let mockTimers: ReturnType<typeof vi.useFakeTimers>;
+  const mockTimers = vi.useFakeTimers();
 
   beforeEach(() => {
-    // Setup fake timers
-    mockTimers = vi.useFakeTimers();
-
-    // Reset all mocks
     vi.clearAllMocks();
-
-    // Create mock runtime
     mockRuntime = {
-      agentId: 'test-agent-123',
-      getSetting: vi.fn((key: string) => {
-        if (key === 'NGROK_AUTH_TOKEN') return 'test-auth-token';
-        return null;
-      }),
+      getSetting: vi.fn(),
     } as any;
-
-    // Create service instance
-    service = new NgrokService(mockRuntime);
+    // Inject the mock ngrok object
+    service = new NgrokService(mockRuntime, mockNgrok);
   });
 
   afterEach(() => {
@@ -61,7 +56,7 @@ describe('NgrokService', () => {
       await service.start();
 
       expect(mockRuntime.getSetting).toHaveBeenCalledWith('NGROK_AUTH_TOKEN');
-      expect(ngrok.authtoken).toHaveBeenCalledWith('test-auth-token');
+      expect(mockNgrok.authtoken).toHaveBeenCalledWith('test-auth-token');
     });
 
     it('should warn if no auth token is available', async () => {
@@ -69,18 +64,18 @@ describe('NgrokService', () => {
 
       await service.start();
 
-      expect(ngrok.authtoken).not.toHaveBeenCalled();
+      expect(mockNgrok.authtoken).not.toHaveBeenCalled();
     });
   });
 
   describe('createTunnel', () => {
     it('should create a tunnel successfully', async () => {
       const mockUrl = 'https://abc123.ngrok.io';
-      vi.mocked(ngrok.connect).mockResolvedValue(mockUrl);
+      vi.mocked(mockNgrok.connect).mockResolvedValue(mockUrl);
 
       const result = await service.createTunnel(3000, 'test-purpose');
 
-      expect(ngrok.connect).toHaveBeenCalledWith({
+      expect(mockNgrok.connect).toHaveBeenCalledWith({
         addr: 3000,
         proto: 'http',
         region: 'us',
@@ -102,7 +97,7 @@ describe('NgrokService', () => {
     });
 
     it('should set auto-cleanup timeout', async () => {
-      vi.mocked(ngrok.connect).mockResolvedValue('https://test.ngrok.io');
+      vi.mocked(mockNgrok.connect).mockResolvedValue('https://test.ngrok.io');
 
       const { id } = await service.createTunnel(3000, 'test', 1000); // 1 second
 
@@ -118,13 +113,13 @@ describe('NgrokService', () => {
 
     it('should handle ngrok connection errors', async () => {
       const error = new Error('Connection failed');
-      vi.mocked(ngrok.connect).mockRejectedValue(error);
+      vi.mocked(mockNgrok.connect).mockRejectedValue(error);
 
       await expect(service.createTunnel(3000, 'test')).rejects.toThrow('Failed to create tunnel');
     });
 
     it('should use custom duration', async () => {
-      vi.mocked(ngrok.connect).mockResolvedValue('https://test.ngrok.io');
+      vi.mocked(mockNgrok.connect).mockResolvedValue('https://test.ngrok.io');
 
       const customDuration = 60 * 60 * 1000; // 1 hour
       const { id } = await service.createTunnel(3000, 'test', customDuration);
@@ -136,24 +131,24 @@ describe('NgrokService', () => {
 
   describe('closeTunnel', () => {
     it('should close tunnel and cleanup', async () => {
-      vi.mocked(ngrok.connect).mockResolvedValue('https://test.ngrok.io');
+      vi.mocked(mockNgrok.connect).mockResolvedValue('https://test.ngrok.io');
 
       const { id } = await service.createTunnel(3000, 'test');
 
       await service.closeTunnel(id);
 
-      expect(ngrok.disconnect).toHaveBeenCalledWith('https://test.ngrok.io');
+      expect(mockNgrok.disconnect).toHaveBeenCalledWith('https://test.ngrok.io');
       expect(service.getTunnel(id)).toBeNull();
     });
 
     it('should handle non-existent tunnel gracefully', async () => {
       await service.closeTunnel('non-existent-id');
 
-      expect(ngrok.disconnect).not.toHaveBeenCalled();
+      expect(mockNgrok.disconnect).not.toHaveBeenCalled();
     });
 
     it('should clear timeout on close', async () => {
-      vi.mocked(ngrok.connect).mockResolvedValue('https://test.ngrok.io');
+      vi.mocked(mockNgrok.connect).mockResolvedValue('https://test.ngrok.io');
       const clearTimeoutSpy = vi.spyOn(global, 'clearTimeout');
 
       const { id } = await service.createTunnel(3000, 'test');
@@ -163,8 +158,8 @@ describe('NgrokService', () => {
     });
 
     it('should handle disconnect errors gracefully', async () => {
-      vi.mocked(ngrok.connect).mockResolvedValue('https://test.ngrok.io');
-      vi.mocked(ngrok.disconnect).mockRejectedValue(new Error('Disconnect failed'));
+      vi.mocked(mockNgrok.connect).mockResolvedValue('https://test.ngrok.io');
+      vi.mocked(mockNgrok.disconnect).mockRejectedValue(new Error('Disconnect failed'));
 
       const { id } = await service.createTunnel(3000, 'test');
 
@@ -178,7 +173,7 @@ describe('NgrokService', () => {
 
   describe('tunnel management', () => {
     it('should track multiple tunnels', async () => {
-      vi.mocked(ngrok.connect)
+      vi.mocked(mockNgrok.connect)
         .mockResolvedValueOnce('https://tunnel1.ngrok.io')
         .mockResolvedValueOnce('https://tunnel2.ngrok.io');
 
@@ -192,7 +187,7 @@ describe('NgrokService', () => {
     });
 
     it('should check if tunnel is active based on expiration', async () => {
-      vi.mocked(ngrok.connect).mockResolvedValue('https://test.ngrok.io');
+      vi.mocked(mockNgrok.connect).mockResolvedValue('https://test.ngrok.io');
 
       const { id } = await service.createTunnel(3000, 'test', 1000);
 
@@ -207,7 +202,7 @@ describe('NgrokService', () => {
 
   describe('extendTunnel', () => {
     it('should extend tunnel expiration', async () => {
-      vi.mocked(ngrok.connect).mockResolvedValue('https://test.ngrok.io');
+      vi.mocked(mockNgrok.connect).mockResolvedValue('https://test.ngrok.io');
 
       const { id } = await service.createTunnel(3000, 'test', 1000);
       const tunnel = service.getTunnel(id);
@@ -221,7 +216,7 @@ describe('NgrokService', () => {
     });
 
     it('should update cleanup timeout when extending', async () => {
-      vi.mocked(ngrok.connect).mockResolvedValue('https://test.ngrok.io');
+      vi.mocked(mockNgrok.connect).mockResolvedValue('https://test.ngrok.io');
       const clearTimeoutSpy = vi.spyOn(global, 'clearTimeout');
       const setTimeoutSpy = vi.spyOn(global, 'setTimeout');
 
@@ -240,13 +235,13 @@ describe('NgrokService', () => {
 
   describe('cleanupExpiredTunnels', () => {
     it('should cleanup multiple expired tunnels', async () => {
-      vi.mocked(ngrok.connect)
+      vi.mocked(mockNgrok.connect)
         .mockResolvedValueOnce('https://tunnel1.ngrok.io')
         .mockResolvedValueOnce('https://tunnel2.ngrok.io')
         .mockResolvedValueOnce('https://tunnel3.ngrok.io');
 
       // Mock disconnect to succeed
-      vi.mocked(ngrok.disconnect).mockResolvedValue(undefined);
+      vi.mocked(mockNgrok.disconnect).mockResolvedValue(undefined);
 
       // Create tunnels with different expirations
       await service.createTunnel(3000, 'tunnel1', 100);
@@ -267,12 +262,12 @@ describe('NgrokService', () => {
 
   describe('stop', () => {
     it('should close all tunnels and kill ngrok', async () => {
-      vi.mocked(ngrok.connect)
+      vi.mocked(mockNgrok.connect)
         .mockResolvedValueOnce('https://tunnel1.ngrok.io')
         .mockResolvedValueOnce('https://tunnel2.ngrok.io');
 
       // Mock disconnect to succeed
-      vi.mocked(ngrok.disconnect).mockResolvedValue(undefined);
+      vi.mocked(mockNgrok.disconnect).mockResolvedValue(undefined);
 
       await service.createTunnel(3000, 'tunnel1');
       await service.createTunnel(3001, 'tunnel2');
@@ -282,15 +277,15 @@ describe('NgrokService', () => {
 
       await service.stop();
 
-      expect(ngrok.disconnect).toHaveBeenCalledTimes(2);
-      expect(ngrok.kill).toHaveBeenCalled();
+      expect(mockNgrok.disconnect).toHaveBeenCalledTimes(2);
+      expect(mockNgrok.kill).toHaveBeenCalled();
       expect(service.getActiveTunnels()).toHaveLength(0);
     });
   });
 
   describe('edge cases', () => {
     it('should handle rapid tunnel creation', async () => {
-      vi.mocked(ngrok.connect).mockImplementation(async () => {
+      vi.mocked(mockNgrok.connect).mockImplementation(async () => {
         return `https://tunnel${Date.now()}.ngrok.io`;
       });
 
@@ -306,7 +301,7 @@ describe('NgrokService', () => {
     it('should handle status change callback', async () => {
       let statusCallback: ((status: string) => void) | undefined;
 
-      vi.mocked(ngrok.connect).mockImplementation(async (opts: any) => {
+      vi.mocked(mockNgrok.connect).mockImplementation(async (opts: any) => {
         statusCallback = opts.onStatusChange;
         return 'https://test.ngrok.io';
       });
@@ -323,7 +318,7 @@ describe('NgrokService', () => {
 
   describe('memory management', () => {
     it('should not leak timeouts', async () => {
-      vi.mocked(ngrok.connect).mockResolvedValue('https://test.ngrok.io');
+      vi.mocked(mockNgrok.connect).mockResolvedValue('https://test.ngrok.io');
 
       // Track timeout creation
       const timeoutIds = new Set<NodeJS.Timeout>();
