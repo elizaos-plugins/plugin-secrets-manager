@@ -1,16 +1,25 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { type IAgentRuntime, logger } from '@elizaos/core';
+import { type IAgentRuntime } from '@elizaos/core';
 import { EnvManagerService } from './service';
 import { Character, Plugin, World, Service, UUID } from '@elizaos/core';
 import { canGenerateEnvVar } from './generation';
 
-// Mock logger directly
-const mockLogger = {
-  info: vi.fn(),
-  warn: vi.fn(),
-  error: vi.fn(),
-  debug: vi.fn(),
-};
+// Mock @elizaos/core and its logger
+vi.mock('@elizaos/core', async () => {
+  const actual = await vi.importActual('@elizaos/core');
+  return {
+    ...actual,
+    logger: {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      debug: vi.fn(),
+    },
+  };
+});
+
+// Import the mocked logger after the mock is set up
+import { logger } from '@elizaos/core';
 
 // Create a mock runtime that matches the actual IAgentRuntime interface
 const createMockRuntime = (): IAgentRuntime => {
@@ -754,7 +763,6 @@ describe('Plugin Scanning', () => {
 
 describe('EnvManagerService Additional Coverage', () => {
   let mockRuntime: IAgentRuntime;
-  let mockLogger: any;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -771,18 +779,6 @@ describe('EnvManagerService Additional Coverage', () => {
       getService: vi.fn(),
       plugins: [],
     } as any;
-
-    mockLogger = {
-      info: vi.fn(),
-      warn: vi.fn(),
-      error: vi.fn(),
-      debug: vi.fn(),
-    };
-
-    vi.mocked(logger).info = mockLogger.info;
-    vi.mocked(logger).warn = mockLogger.warn;
-    vi.mocked(logger).error = mockLogger.error;
-    vi.mocked(logger).debug = mockLogger.debug;
   });
 
   it('should handle character secrets with existing ENV_ prefixed keys', async () => {
@@ -883,7 +879,7 @@ describe('EnvManagerService Additional Coverage', () => {
 
     await service.scanPluginRequirements();
 
-    expect(mockLogger.error).toHaveBeenCalledWith(
+    expect(logger.error).toHaveBeenCalledWith(
       '[EnvManager] Error scanning plugin requirements:',
       expect.any(Error)
     );
